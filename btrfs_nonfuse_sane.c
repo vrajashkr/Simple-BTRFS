@@ -74,15 +74,15 @@ DIR* stack_top(STACKQUEUE* s){
         return NULL; 
 }
 
-//INODE* get_leaf(BNODE* active_root,char* target,BNODE* current);
+INNERNODE* search_for_string(BNODE* current_root,char* target);
 int insert_internal(STACKQUEUE*s,BNODE* current_root,char* target,long id,BNODE* current_child,BNODE* new_child);
 void insert_leaf(STACKQUEUE *s,BNODE* cr,char* target,long id);
 void fx_ls(BNODE* current_dir);
 int fx_touch(STACKQUEUE*s ,DIR* current_root,char* name,char* content);
 int fx_mkdir(STACKQUEUE*s, DIR* current_root,char* name);
 void fx_pwd(STACKQUEUE* s);
-// void fx_cd(STACKQUEUE* s,BNODE* active_bnode,DIR* active_dir,char * target_dir);
-// void fx_cat(BNODE* active_root,char* target);
+void fx_cd(STACKQUEUE* s,char * target_dir);
+void fx_cat(BNODE* active_root,char* target);
 INNERNODE** MASSIVE_HASH;
 int main(){
         printf("[START] BTRFS initialising....\n");
@@ -97,9 +97,9 @@ int main(){
         
         root->dir_file_count = 0;
         root->dir_tree = (BNODE*)malloc(sizeof(BNODE));
-        root->dir_tree->children = (BNODE**)malloc(sizeof(BNODE*)*4);
-        root->dir_tree->ids = (long int*)malloc(sizeof(long int)*3);
-        root->dir_tree->names = (char**)malloc(sizeof(char)*3);
+        root->dir_tree->children = (BNODE**)malloc(sizeof(BNODE*)*5);
+        root->dir_tree->ids = (long int*)malloc(sizeof(long int)*4);
+        root->dir_tree->names = (char**)malloc(sizeof(char)*4);
         root->dir_tree->length = -1;
         root->dir_tree->controller = 0;
         root->dir_tree->parent = NULL;
@@ -127,12 +127,12 @@ int main(){
                 switch (p)
                 {
                         case 0:{fx_ls(stack_top(&dirstack)->dir_tree);}break;
-                        //case 1:{fx_cd(&dirstack,active_dir->dir_tree,active_dir,words[1]);}break;
+                        case 1:{fx_cd(&dirstack,words[1]);}break;
                         case 2:{fx_mkdir(&dirstack,stack_top(&dirstack),words[1]);}break;
                         case 3:{}break;
-                        //case 4:{fx_cat(active_dir->dir_tree,words[1]);}break;
+                        case 4:{fx_cat(stack_top(&dirstack)->dir_tree,words[1]);}break;
                         case 5:{fx_pwd(&dirstack);}break;
-                        case 6:{fx_touch(&dirstack,stack_top(&dirstack),words[1],words[2]);}break;
+                        case 6:{fx_touch(&dirstack,stack_top(&dirstack),words[1],"abc");}break;
                         case 7:{}break;
                         case 8:{rogue = 0;}break;
                         default:{printf("[ERROR] Is it that hard to follow instructions? That command doesn't exist\n");}
@@ -147,13 +147,16 @@ void fx_ls(BNODE* current_dir){
         if (current_dir == NULL)return;
         int flag = 0;
         
-        for (int j = 0; j < current_dir->length+1; j++){
+        for (int j = 0; j <= current_dir->length+1; j++){
                 if (current_dir->children[j]!=NULL){
+                        //printf("call pass to child %d\n",j);
                         fx_ls(current_dir->children[j]);
                         flag = 1;
                 }
         }
+        
         if (flag == 0){
+                printf("This is a new node\n");fflush(stdout);
                 for (int i = 0; i < current_dir->length+1;i++){ 
                                 //printf("i %d %d\n",i,current_dir->ids[i]);fflush(stdout);
                                 INNERNODE*n = MASSIVE_HASH[current_dir->ids[i]];
@@ -175,91 +178,155 @@ int insert_internal(STACKQUEUE*s,BNODE* current_root,char* target,long id,BNODE*
                         //there is some space
                         int i = 0;
                         for (i = 0; i < current_root->length+1; i++){
-                                if (strcmp(target,current_root->names[i]) == 1){
+                                if (strcmp(target,current_root->names[i])<0){
                                         //create space and insert
-                                        current_root->names[i+1] = (char*)malloc(sizeof(char)*100);
-                                        strcpy(current_root->names[i+1],current_root->names[i]);
-                                        current_root->ids[i+1] = current_root->ids[i];
+                                        for (int x = current_root->length+1;x>i;x--){
+                                                if (current_root->names[x]== NULL){
+                                                        current_root->names[x] = (char*)malloc(sizeof(char)*100);
+                                                }
+                                                strcpy(current_root->names[x],current_root->names[x-1]);
+                                                current_root->ids[x] = current_root->ids[x-1];
+                                                current_root->children[x+1] = current_root->children[x];
+                                        }
                                         current_root->ids[i] = id;
                                         strcpy(current_root->names[i],target);
                                         current_root->length++;
-                                        current_root->children[current_root->length] = new_child;
+                                        current_root->children[i+1] = new_child; //possible
                                         new_child->parent = current_root;
                                         break;
                                 }
                          }
                          if (i == current_root->length+1){
+                                printf("i is %d ",i);fflush(stdout);
                                 current_root->names[i] = (char*)malloc(sizeof(char)*100);
                                 strcpy(current_root->names[i],target);
                                 current_root->length++;
+                                current_root->children[i+1] = new_child;
+                                new_child->parent = current_root;
                         }
                 }else{
                         //danger: no space in the damned internal
                         //split node into 2
                         //create new bnode
+                        int i = 0;
+                        for (i = 0; i < current_root->length+1; i++){
+                                if (strcmp(target,current_root->names[i]) <0){
+                                        //create space and insert
+                                        for (int x = current_root->length+1;x>i;x--){
+                                                if (current_root->names[x]== NULL){
+                                                        current_root->names[x] = (char*)malloc(sizeof(char)*100);
+                                                }
+                                                strcpy(current_root->names[x], current_root->names[x-1]);
+                                                current_root->ids[x] = current_root->ids[x-1];
+                                                current_root->children[x+1] = current_root->children[x];
+                                        }
+                                        //current_root->names[i+1] = (char*)malloc(sizeof(char)*100);
+                                        //strcpy(current_root->names[i+1],current_root->names[i]);
+                                        //current_root->ids[i+1] = current_root->ids[i];
+                                        current_root->ids[i] = id;
+                                        strcpy(current_root->names[i],target);
+                                        current_root->children[i+1] = new_child;
+                                        new_child->parent = current_root;
+                                        //current_root->length++;
+                                        //current_root->children[current_root->length] = new_child;
+                                       // new_child->parent = current_root;
+                                        break;
+                                }
+                         }
+                         //printf("checkpoint 1");fflush(stdout);
+                         if (i == current_root->length+1){
+                                current_root->names[i] = (char*)malloc(sizeof(char)*100);
+                                strcpy(current_root->names[i],target);
+                                current_root->children[i+1] = new_child;
+                                new_child->parent = current_root;
+                                //current_root->length++;
+                        }
+                        //printf("checkpoint 2");fflush(stdout);
                         BNODE* bnode = (BNODE*)malloc(sizeof(BNODE));
-                        bnode->children = (BNODE**)malloc(sizeof(BNODE*)*4);
-                        bnode->ids = (long int*)malloc(sizeof(long int)*3);
-                        bnode->names = (char**)malloc(sizeof(char)*3);
+                        bnode->children = (BNODE**)malloc(sizeof(BNODE*)*5);
+                        bnode->ids = (long int*)malloc(sizeof(long int)*4);
+                        bnode->names = (char**)malloc(sizeof(char)*4);
                         bnode->length = -1;
                         bnode->controller = 1; bnode->parent = NULL;
 
                        //redistribute
-                        bnode->ids[0] = current_root->ids[1];
-                        bnode->ids[1] = current_root->ids[2];
-                        bnode->length = 1;
+                        bnode->ids[0] = current_root->ids[3];
+                        
+                        bnode->length +=1;
                         bnode->names[0] = (char*)malloc(sizeof(char)*100);
-                        bnode->names[1] = (char*)malloc(sizeof(char)*100);
-                        strcpy(bnode->names[0],current_root->names[1]);
-                        strcpy(bnode->names[1],current_root->names[2]);
-                        current_root->length -= 2;
-                        insert_internal(s,current_root->parent,bnode->names[0],bnode->ids[0],current_root,bnode);
+                        
+                        strcpy(bnode->names[0],current_root->names[3]);
+                       
+                        //don't forget to redistribute children
+                        bnode->children[0] = current_root->children[3];
+                        bnode->children[0]->parent = bnode;
+                        bnode->children[1] = current_root->children[4];
+                        bnode->children[1]->parent = bnode;
+                       
+                        current_root->length -= 1; //possible
+                        //printf("about");fflush(stdout);
+                        insert_internal(s,current_root->parent,current_root->names[2],current_root->ids[2],current_root,bnode);
                 }
         }else{
                 //root insert,new root to be created
+                //printf("what is going on");fflush(stdout);
                 BNODE* bnode = (BNODE*)malloc(sizeof(BNODE));
-                bnode->children = (BNODE**)malloc(sizeof(BNODE*)*4);
-                bnode->ids = (long int*)malloc(sizeof(long int)*3);
-                bnode->names = (char**)malloc(sizeof(char)*3);
+                bnode->children = (BNODE**)malloc(sizeof(BNODE*)*5);
+                bnode->ids = (long int*)malloc(sizeof(long int)*4);
+                bnode->names = (char**)malloc(sizeof(char)*4);
                 bnode->length = -1;
                 bnode->controller = 1; bnode->parent = NULL;
-                
+                //printf("here");fflush(stdout);
                 bnode->children[0] = current_child;
                 bnode->children[1] = new_child;
                 current_child->parent = bnode;
                 new_child->parent = bnode;
-                bnode->length = 0;
+                bnode->length += 1;
                 bnode->ids[0] = id;
                 bnode->names[0] = (char*)malloc(sizeof(char)*100);
                 strcpy(bnode->names[0],target);
-
+                printf(" [NOTE] root change complete, target : %s\n",target);fflush(stdout);
                 stack_top(s)->dir_tree = bnode;
         }     
 }
 void insert_leaf(STACKQUEUE *s,BNODE* cr,char* target,long id){
         BNODE* current_root = cr;
         int i = 0;
+        
         while (current_root->controller != 0){
                 i = 0;
-                                if (strcmp(target,current_root->names[i]) == 1){
-                                        break;
-                                }
+                for (i = 0;i<current_root->length+1;i++){
+                        if (strcmp(target,current_root->names[i]) < 0){
+                                break;
+                        }
                 }
+               
                 current_root = current_root->children[i];
         }
         if (current_root->controller == 0){ //leaf
                 if (current_root->length < 2){
                         //there is some space
                         int i = 0;
+                        printf("len %d",current_root->length);fflush(stdout);
                         for ( i = 0; i < current_root->length+1; i++){
-                                if (strcmp(target,current_root->names[i]) == 1){
+                                //printf("i %d\n",i);fflush(stdout);
+                                printf("compare: %s %s %d \n",target, current_root->names[i],strcmp(target,current_root->names[i]));fflush(stdout);
+                                if (strcmp(target,current_root->names[i]) < 0){
                                         //create space and insert
-                                        current_root->names[i+1] = (char*)malloc(sizeof(char)*100);
-                                        strcpy(current_root->names[i+1],current_root->names[i]);
-                                        current_root->ids[i+1] = current_root->ids[i];
+
+                                        for (int x = current_root->length+1;x>i;x--){
+                                                if (current_root->names[x]== NULL){
+                                                        current_root->names[x] = (char*)malloc(sizeof(char)*100);
+
+                                                }
+                                                strcpy(current_root->names[x],current_root->names[x-1]);
+                                                current_root->ids[x] = current_root->ids[x-1];
+                                        }
+                                        
                                         current_root->ids[i] = id;
                                         strcpy(current_root->names[i],target);
-                                        current_root->length++;break;
+                                        current_root->length++;
+                                        break;
                                 }
                                 if (strcmp(target,current_root->names[i]) == 0){printf("[WARNING] File exists\n");return;}
                         }
@@ -269,27 +336,54 @@ void insert_leaf(STACKQUEUE *s,BNODE* cr,char* target,long id){
                                 current_root->ids[i] = id;
                                 current_root->length++;
                         }
+                        //printf("i %d",i);fflush(stdout);
+                        
                 }else{
                         //danger: no space in the damned leaf
                         //split node into 2
                         //create new bnode
+                        int i = 0;
+                        for ( i = 0; i < current_root->length+1; i++){
+                                if (strcmp(target,current_root->names[i]) <0){
+                                        //create space and insert
+                                        for (int x = current_root->length+1;x>i;x--){
+                                                if (current_root->names[x]== NULL){
+                                                        current_root->names[x] = (char*)malloc(sizeof(char)*100);
+                                                }
+                                                strcpy(current_root->names[x], current_root->names[x-1]);
+                                                current_root->ids[x] = current_root->ids[x-1];
+                                        }
+                                        
+                                        current_root->ids[i] = id;
+                                        strcpy(current_root->names[i],target);
+                                        break;
+                                }
+                                if (strcmp(target,current_root->names[i]) == 0){printf("[WARNING] File exists\n");return;}
+                        }
+                        
+                        if (i == current_root->length+1){
+                                current_root->names[i] = (char*)malloc(sizeof(char)*100);
+                                strcpy(current_root->names[i],target);
+                                current_root->ids[i] = id;
+                        }
+
                         BNODE* bnode = (BNODE*)malloc(sizeof(BNODE));
-                        bnode->children = (BNODE**)malloc(sizeof(BNODE*)*4);
-                        bnode->ids = (long int*)malloc(sizeof(long int)*3);
-                        bnode->names = (char**)malloc(sizeof(char)*3);
+                        bnode->children = (BNODE**)malloc(sizeof(BNODE*)*5);
+                        bnode->ids = (long int*)malloc(sizeof(long int)*4);
+                        bnode->names = (char**)malloc(sizeof(char)*4);
                         bnode->length = -1;
                         bnode->controller = 0; 
-
+                        
                        //redistribute
-                        bnode->ids[0] = current_root->ids[1];
-                        bnode->ids[1] = current_root->ids[2];
-                        bnode->length = 1;
+                        bnode->ids[0] = current_root->ids[2];
+                        bnode->ids[1] = current_root->ids[3];
+                        
+                        bnode->length +=2;
                         bnode->names[0] = (char*)malloc(sizeof(char)*100);
                         bnode->names[1] = (char*)malloc(sizeof(char)*100);
-                        strcpy(bnode->names[0],current_root->names[1]);
-                        strcpy(bnode->names[1],current_root->names[2]);
-                        current_root->length -= 2;
-
+                        strcpy(bnode->names[0],current_root->names[2]);
+                        strcpy(bnode->names[1],current_root->names[3]);
+                        current_root->length -= 1;
                         insert_internal(s,current_root->parent,bnode->names[0],bnode->ids[0],current_root,bnode);
                 }
         }        
@@ -300,7 +394,7 @@ int fx_touch(STACKQUEUE*s,DIR* current_root,char* name,char* content){
         XFILE* newfile = (XFILE*)malloc(sizeof(XFILE));
         strcpy(newfile->file_name,name);
         long int id = rand() % 10000;
-        printf("%ld",id);
+        printf("%ld",id);fflush(stdout);
         newfile->file_id = id;
         newfile->file_contents = (unsigned char*)malloc(sizeof(unsigned char)*strlen(content));
         strcpy(newfile->file_contents,content);
@@ -333,7 +427,7 @@ int fx_mkdir(STACKQUEUE*s, DIR* current_root,char* name){
 
 void fx_pwd(STACKQUEUE* s){
         int t = s->head;
-        printf("[PATH] /");
+        printf("[PATH] ");
         DIR* a;
         while (t <= s->top) {
                 a = s->stackqueue[t++];
@@ -341,73 +435,60 @@ void fx_pwd(STACKQUEUE* s){
         }
         printf("\n");
 }
+INNERNODE* search_for_string(BNODE* current_root,char* target){
+        int i = 0;
+        while (current_root->controller != 0){
+               i = 0;
+                for (i = 0;i<current_root->length+1;i++){
+                        if (strcmp(target,current_root->names[i]) < 0){
+                                break;
+                        }
+                }
+                current_root = current_root->children[i];
+        }
+        if (current_root->controller ==0){
+                //leaf
+                for (int i = 0; i < current_root->length+1;i++){
+                        if (strcmp(target,current_root->names[i]) == 0){
+                               //found
+                               long int found = current_root->ids[i];
+                               return MASSIVE_HASH[found];
+                        }
+                }
+                return NULL;
+        }
+}
 
-// void fx_cd(STACKQUEUE* s,BNODE* active_bnode,DIR* active_dir,char * target_dir){
-//         if (strcmp(target_dir,".")==0){
-//                 //move to parent
-//                 int k = pop_stack(s);
-//                 if (k == 1){
-//                         printf("[WARN] Can't go higher than root\n");
-//                 }else{
-//                         active_bnode = stack_top_bnode(s); 
-//                         active_dir = stack_top_dir(s);
-//                 }
-//         }else{
-//                 //move downwind,search for the directory first
-//                 BNODE* newnode; INODE* newinode;
-//                 newinode = get_leaf(active_bnode,target_dir,newnode);
-
-//                 if (newinode!= NULL){
-//                         //change dir
-//                         push_stack(s,newnode,newinode->stored_dir);
-//                         active_bnode = newnode;
-//                         active_dir = newinode->stored_dir;
-//                 }
-//         }
-// }
-// void fx_cat(BNODE* active_root,char* target){
-//         //find target and then print contents
-//         BNODE* current_root = active_root;
-//         INODE* i = get_leaf(current_root,target,current_root);
-//         if (i == NULL) return;
-//         if (i->discriminator == 0){
-//                 printf("[OUTPUT] File Contents: %s | %lld bytes\n",i->stored_file->file_contents,i->stored_file->file_size);
-//         }else{
-//                 printf("[OUTPUT] This is a directory\n");
-//         }
-// }
-
-// INODE* get_leaf(BNODE* active_root,char* target,BNODE*current){
-//         BNODE* current_root = active_root;
-//         int found = 0;
-//                 for (int i = 0; i < current_root->length;i++){
-//                         if (strcmp(current_root->ids[i],target) == 0){
-//                                 found = 1;
-//                                 if (current_root->controller != 1){
-//                                         return get_leaf(current_root->children[i],target,current_root);
-//                                 }
-//                                 if (current_root->controller == 1){
-//                                         //return the INODE
-//                                         for (int j = 0; j < current_root->length;j++){
-//                                                 if (current_root->contents[j]->discriminator == 0){
-//                                                         if (strcmp(current_root->contents[j]->stored_file->file_name,target)==0){
-//                                                                 return current_root->contents[j];
-//                                                         }
-//                                                 }
-//                                                 if (current_root->contents[j]->discriminator == 1){
-//                                                         if (strcmp(current_root->contents[j]->stored_dir->dir_name,target)==0){
-//                                                                 return current_root->contents[j];
-//                                                         }
-//                                                 }
-//                                         }
-//                                 }
-//                         }
-//                         if (strcmp(current_root->ids[i],target) == -1){
-//                                         return get_leaf(current_root->children[i],target,current_root);
-//                         }
-//                 }
-                
-//         if (found == 0){
-//                 printf("[OUTPUT] OBJECT Not Found\n"); return NULL;
-//         }
-// }
+void fx_cd(STACKQUEUE* s,char * target_dir){
+        if (strcmp(target_dir,".")==0){
+                //move to parent
+                int k = pop_stack(s);
+                if (k == 1){
+                        printf("[WARN] Can't go higher than root\n");
+                }
+        }else{
+                INNERNODE* mynode = search_for_string(stack_top(s)->dir_tree,target_dir);
+                if (mynode==NULL){
+                        printf("[ERROR] Directory not found\n");
+                        return;
+                }
+                if (mynode->object_type == 1){ //dir
+                        //successfully located dir
+                        push_stack(s,mynode->mydir);
+                        printf("[INFO] Directory has been changed\n");
+                        fx_pwd(s);
+                }else{
+                        printf("[ERROR] You can't change directory to a FILE. Go learn some common sense\n");
+                }
+        }
+}
+void fx_cat(BNODE* active_root,char* target){
+        //find target and then print contents
+        INNERNODE* mynode = search_for_string(active_root,target);
+        if (mynode == NULL){printf("[ERROR] File not found\n"); return;}
+        if (mynode->object_type == 0){
+                printf("[OUTPUT] File Contents: %s | %lld bytes\n",mynode->myfile->file_contents,mynode->myfile->file_size);
+        }else{
+                printf("[OUTPUT] This is a directory, are you dumb or what?\n");
+        }
+}

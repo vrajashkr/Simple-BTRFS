@@ -83,7 +83,11 @@ int fx_mkdir(STACKQUEUE*s, DIR* current_root,char* name);
 void fx_pwd(STACKQUEUE* s);
 void fx_cd(STACKQUEUE* s,char * target_dir);
 void fx_cat(BNODE* active_root,char* target);
+void fx_rmdir(STACKQUEUE*s, DIR* current_root char* target);
+void fx_rm(STACKQUEUE*s ,DIR* current_root,char* name);
+
 INNERNODE** MASSIVE_HASH;
+
 int main(){
         printf("[START] BTRFS initialising....\n");
         MASSIVE_HASH = (INNERNODE**)malloc(sizeof(INNERNODE*)*100000);
@@ -129,11 +133,11 @@ int main(){
                         case 0:{fx_ls(stack_top(&dirstack)->dir_tree);}break;
                         case 1:{fx_cd(&dirstack,words[1]);}break;
                         case 2:{fx_mkdir(&dirstack,stack_top(&dirstack),words[1]);}break;
-                        case 3:{}break;
+                        case 3:{fx_rmdir(&dirstack,stack_top(&dirstack),words[1]);}break;
                         case 4:{fx_cat(stack_top(&dirstack)->dir_tree,words[1]);}break;
                         case 5:{fx_pwd(&dirstack);}break;
                         case 6:{fx_touch(&dirstack,stack_top(&dirstack),words[1],"abc");}break;
-                        case 7:{}break;
+                        case 7:{fx_rm(&dirstack,stack_top(&dirstack),words[1]);}break;
                         case 8:{rogue = 0;}break;
                         default:{printf("[ERROR] Is it that hard to follow instructions? That command doesn't exist\n");}
                                 break;
@@ -220,16 +224,12 @@ int insert_internal(STACKQUEUE*s,BNODE* current_root,char* target,long id,BNODE*
                                                 current_root->ids[x] = current_root->ids[x-1];
                                                 current_root->children[x+1] = current_root->children[x];
                                         }
-                                        //current_root->names[i+1] = (char*)malloc(sizeof(char)*100);
-                                        //strcpy(current_root->names[i+1],current_root->names[i]);
-                                        //current_root->ids[i+1] = current_root->ids[i];
+                                        
                                         current_root->ids[i] = id;
                                         strcpy(current_root->names[i],target);
                                         current_root->children[i+1] = new_child;
                                         new_child->parent = current_root;
-                                        //current_root->length++;
-                                        //current_root->children[current_root->length] = new_child;
-                                       // new_child->parent = current_root;
+                                       
                                         break;
                                 }
                          }
@@ -276,7 +276,7 @@ int insert_internal(STACKQUEUE*s,BNODE* current_root,char* target,long id,BNODE*
                 bnode->names = (char**)malloc(sizeof(char)*4);
                 bnode->length = -1;
                 bnode->controller = 1; bnode->parent = NULL;
-                //printf("here");fflush(stdout);
+                
                 bnode->children[0] = current_child;
                 bnode->children[1] = new_child;
                 current_child->parent = bnode;
@@ -478,7 +478,7 @@ void fx_cd(STACKQUEUE* s,char * target_dir){
                         printf("[INFO] Directory has been changed\n");
                         fx_pwd(s);
                 }else{
-                        printf("[ERROR] You can't change directory to a FILE. Go learn some common sense\n");
+                        printf("[ERROR] You can't change directory to a FILE\n");
                 }
         }
 }
@@ -489,6 +489,64 @@ void fx_cat(BNODE* active_root,char* target){
         if (mynode->object_type == 0){
                 printf("[OUTPUT] File Contents: %s | %lld bytes\n",mynode->myfile->file_contents,mynode->myfile->file_size);
         }else{
-                printf("[OUTPUT] This is a directory, are you dumb or what?\n");
+                printf("[OUTPUT] This is a directory\n");
         }
+}
+
+void delete_leaf(STACKQUEUE*s,char* target){
+        BNODE* current_root = stack_top(s)->dir_tree;
+        int i = 0;
+        while (current_root->controller != 0){
+               i = 0;
+                for (i = 0;i<current_root->length+1;i++){
+                        if (strcmp(target,current_root->names[i]) < 0){
+                                break;
+                        }
+                }
+                current_root = current_root->children[i];
+        }
+        if (current_root->controller ==0){
+                //leaf
+                for (int i = 0; i < current_root->length+1;i++){
+                        if (strcmp(target,current_root->names[i]) == 0){
+                               //found
+                               printf("Leaf Delete\n");fflush(stdout);
+                               long int found = current_root->ids[i];
+                               free(MASSIVE_HASH[found]);
+                               MASSIVE_HASH[found] = NULL;
+                               if (current_root->length-1 == 0 ){
+                                       //leaf becomes low
+                                       if ( (i < 3 && current_root->parent->children[i+1]!= NULL){
+                                               // check next oldest sibling
+                                               if (current_root->parent->children[i+1]->length > 1)){
+                                                       //check if excess
+                                               }else{
+                                                       //no excess merge nodes
+                                               }
+                                       }else{
+                                               //next youngest sibling
+                                               if (current_root->parent->children[i-1]->length > 1)){
+                                                       //check if excess
+                                               }else{
+                                                       //no excess merge nodes
+                                               }
+                                       }
+                                
+                        //        }else if(current_root-length-1 == -1){
+                        //                //leaf becomes empty,merge
+                        //        }
+                               else{
+                                       current_root->length--;
+                               }
+                        }
+                }
+                
+        }
+}
+void fx_rmdir(STACKQUEUE*s, DIR* current_root char* target){
+    //check the link at http://www.cburch.com/cs/340/reading/btree/index.html for info on deletion algo
+    //use this visulization to help https://www.cs.usfca.edu/~galles/visualization/BPlusTree.html
+}
+void fx_rm(STACKQUEUE*s ,DIR* current_root,char* name){
+
 }

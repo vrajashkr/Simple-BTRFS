@@ -106,6 +106,7 @@ void fx_cat(BNODE *active_root, char *target);
 void fx_rmdir(STACKQUEUE *s, DIR *current_root, char *target);
 void fx_rm(STACKQUEUE *s, DIR *current_root, char *name);
 int delete_utiity(BNODE *current_root, char *target);
+void fix_keys(BNODE *current_root, int old_id, int new_id, char *newname);
 INNERNODE **MASSIVE_HASH;
 
 int main()
@@ -681,21 +682,21 @@ void fx_cat(BNODE *active_root, char *target)
         }
 }
 
-/*void delete_leaf(STACKQUEUE *s, char *target)
+void delete_leaf(STACKQUEUE *s, char *target)
 {
         BNODE *current_root = stack_top(s)->dir_tree;
-        int i = 0;
+        int j = 0;
         while (current_root->controller != 0)
         {
-                i = 0;
-                for (i = 0; i < current_root->length + 1; i++)
+                j = 0;
+                for (j = 0; j < current_root->length + 1; j++)
                 {
-                        if (strcmp(target, current_root->names[i]) < 0)
+                        if (strcmp(target, current_root->names[j]) < 0)
                         {
                                 break;
                         }
                 }
-                current_root = current_root->children[i];
+                current_root = current_root->children[j];
         }
         if (current_root->controller == 0)
         {
@@ -705,76 +706,59 @@ void fx_cat(BNODE *active_root, char *target)
                         if (strcmp(target, current_root->names[i]) == 0)
                         {
                                 //found
-                                printf("Leaf Delete\n");
+                                printf("found at %d\n",i);
                                 fflush(stdout);
                                 long int found = current_root->ids[i];
                                 free(MASSIVE_HASH[found]);
                                 MASSIVE_HASH[found] = NULL;
-                                for (int x = current_root->length + 1; x > i; x--)
+                                for (int x =i;x< current_root->length;x++)
                                 {
                                         if (current_root->names[x] == NULL)
                                         {
                                                 current_root->names[x] = (char *)malloc(sizeof(char) * 100);
                                         }
-                                        strcpy(current_root->names[x], current_root->names[x - 1]);
-                                        current_root->ids[x] = current_root->ids[x - 1];
-                                        current_root->children[x+1]=current_root->children[x];
+                                        strcpy(current_root->names[x], current_root->names[x+1]);
+                                        current_root->ids[x] = current_root->ids[x+1];
+                                        current_root->children[x] = current_root->children[x+1];
                                 }
-                                if (current_root->length - 1 == 0)
+                                if (current_root->length - 1 == -1)
                                 {
                                         //leaf becomes low
-                                        if ((i < 3 && current_root->parent->children[i + 1] != NULL))
+                                        printf("Leaf is low\n");
+                                        if ((j <= current_root->parent->length && current_root->parent->children[j + 1] != NULL))
                                         {
-                                                // check next oldest sibling
-                                                if (current_root->parent->children[i + 1]->length > 1)
+                                                printf("Right sibling\n");
+                                                BNODE *sibling = current_root->parent->children[j + 1];
+                                                if (sibling->length - 1 != -1)
                                                 {
-                                                        //check if excess
-                                                        BNODE *sibling = current_root->parent->children[i + 1];
-                                                        current_root->names[i] = sibling->names[0];
-                                                        current_root->ids[i] = sibling->ids[0];
-                                                        current_root->children[i + 1] = sibling->children[0];
-                                                        for (int x = 0; x < 2; x++)
+                                                        printf("If excess\n");
+                                                        int old_id=sibling->ids[0];
+                                                        current_root->ids[0] = sibling->ids[0];
+                                                        strcpy(current_root->names[0], sibling->names[0]);
+                                                        printf("adjusting keys\n");
+                                                        for (int x = 0; x <sibling->length; x++)
                                                         {
-                                                                strcpy(sibling->names[x],sibling->names[x + 1]);
+                                                                strcpy(sibling->names[x], sibling->names[x + 1]);
                                                                 sibling->ids[x] = sibling->ids[x + 1];
-                                                        }
-                                                        for (int x = 0; x < 3; x++)
-                                                        {
                                                                 sibling->children[x] = sibling->children[x + 1];
                                                         }
-                                                }
-                                                else
-                                                {
-                                                        //no excess merge nodes
-                                                        BNODE *sibling = current_root->parent->children[i + 1];
-                                                        for (int x = 0; x <= sibling->length; x++)
-                                                        {
-                                                                current_root->names[i + x] = sibling->names[x];
-                                                                current_root->ids[i + x] = sibling->ids[x];
-                                                        }
-                                                        for (int x = 0; x <= sibling->length + 1; x++)
-                                                        {
-                                                                current_root->names[i + x] = sibling->names[x];
-                                                                current_root->ids[i + x] = sibling->ids[x];
-                                                        }
+                                                        sibling->length--;
+                                                        printf("before fixing keys\n");
+                                                        fix_keys(sibling, old_id, sibling->ids[0], sibling->names[0]);
                                                 }
                                         }
-                                        else
+                                        if (j >= 1 && current_root->parent->children[j - 1]->length > 0)
                                         {
-                                                //next youngest sibling
-                                                if (current_root->parent->children[i - 1]->length > 1)
-                                                {
-                                                        //check if excess;
-                                                }
-                                                else
-                                                {
-                                                        //no excess merge nodes
-                                                }
+                                                printf("Left sibling\n");
+                                                printf("adjusting keys\n");
+                                                BNODE *sibling = current_root->parent->children[j - 1];
+                                                current_root->ids[i] = sibling->ids[sibling->length];
+                                                strcpy(current_root->names[i], sibling->names[sibling->length]);
+                                                printf("before fixing keys\n");
+                                                fix_keys(current_root, found, current_root->ids[i], current_root->names[i]);
+                                                sibling->length--;
                                         }
-
-                                } //else if(current_root-length-1 == -1){
-                                  //                //leaf becomes empty,merge
-                                  //        }
+                                }
                                 else
                                 {
                                         current_root->length--;
@@ -782,13 +766,35 @@ void fx_cat(BNODE *active_root, char *target)
                         }
                 }
         }
-}*/
+}
+void fix_keys(BNODE *current_root, int old_id, int new_id, char *newname)
+{
+        if (current_root->parent == NULL)
+        {
+                return;
+        }
+        else
+        {
+                BNODE *parent = current_root->parent;
+                int i = 0;
+                while (parent->ids[i] != old_id && i<=parent->length)
+                {   
+                        i++;
+                }
+                if (parent->ids[i] = old_id)
+                {
+                        parent->ids[i] = new_id;
+                        strcpy(parent->names[i], newname);
+                }
+                fix_keys(current_root->parent, old_id, new_id, newname);
+        }
+}
 void fx_rmdir(STACKQUEUE *s, DIR *current_root, char *target)
 {
         //check the link at http://www.cburch.com/cs/340/reading/btree/index.html for info on deletion algo
         //use this visulization to help https://www.cs.usfca.edu/~galles/visualization/BPlusTree.html
         BNODE *current_dir = current_root->dir_tree;
-        int cond = delete_utiity(current_dir, target);
+        /*int cond = delete_utiity(current_dir, target);
         if (cond)
         {
                 printf("[NOTE] Directory %s successfully removed", target);
@@ -796,11 +802,12 @@ void fx_rmdir(STACKQUEUE *s, DIR *current_root, char *target)
         else
         {
                 printf("[ERROR] No such directory found");
-        }
+        }*/
+        delete_leaf(s, target);
 }
 void fx_rm(STACKQUEUE *s, DIR *current_root, char *name)
 {
-        BNODE *current_dir = current_root->dir_tree;
+        /*BNODE *current_dir = current_root->dir_tree;
         int cond = delete_utiity(current_dir, name);
         if (cond)
         {
@@ -809,5 +816,6 @@ void fx_rm(STACKQUEUE *s, DIR *current_root, char *name)
         else
         {
                 printf("[ERROR] No such file found");
-        }
+        }*/
+        delete_leaf(s, name);
 }

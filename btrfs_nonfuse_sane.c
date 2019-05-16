@@ -106,7 +106,7 @@ void fx_cat(BNODE *active_root, char *target);
 void fx_rmdir(STACKQUEUE *s, DIR *current_root, char *target);
 void fx_rm(STACKQUEUE *s, DIR *current_root, char *name);
 int delete_utiity(BNODE *current_root, char *target);
-void fix_keys(BNODE *current_root, int old_id, int new_id, char *newname);
+void fix_keys(BNODE *current_root, int old_id, char *old_name, int new_id, char *newname);
 INNERNODE **MASSIVE_HASH;
 
 int main()
@@ -706,20 +706,20 @@ void delete_leaf(STACKQUEUE *s, char *target)
                         if (strcmp(target, current_root->names[i]) == 0)
                         {
                                 //found
-                                printf("found at %d\n",i);
+                                printf("found at %d\n", i);
                                 fflush(stdout);
                                 long int found = current_root->ids[i];
                                 free(MASSIVE_HASH[found]);
                                 MASSIVE_HASH[found] = NULL;
-                                for (int x =i;x< current_root->length;x++)
+                                for (int x = i; x < current_root->length; x++)
                                 {
                                         if (current_root->names[x] == NULL)
                                         {
                                                 current_root->names[x] = (char *)malloc(sizeof(char) * 100);
                                         }
-                                        strcpy(current_root->names[x], current_root->names[x+1]);
-                                        current_root->ids[x] = current_root->ids[x+1];
-                                        current_root->children[x] = current_root->children[x+1];
+                                        strcpy(current_root->names[x], current_root->names[x + 1]);
+                                        current_root->ids[x] = current_root->ids[x + 1];
+                                        current_root->children[x] = current_root->children[x + 1];
                                 }
                                 if (current_root->length - 1 == -1)
                                 {
@@ -732,11 +732,13 @@ void delete_leaf(STACKQUEUE *s, char *target)
                                                 if (sibling->length - 1 != -1)
                                                 {
                                                         printf("If excess\n");
-                                                        int old_id=sibling->ids[0];
+                                                        int old_id = sibling->ids[0];
+                                                        char *old_name = malloc(sizeof(char) * 100);
+                                                        strcpy(old_name, sibling->names[0]);
                                                         current_root->ids[0] = sibling->ids[0];
                                                         strcpy(current_root->names[0], sibling->names[0]);
                                                         printf("adjusting keys\n");
-                                                        for (int x = 0; x <sibling->length; x++)
+                                                        for (int x = 0; x < sibling->length; x++)
                                                         {
                                                                 strcpy(sibling->names[x], sibling->names[x + 1]);
                                                                 sibling->ids[x] = sibling->ids[x + 1];
@@ -744,30 +746,58 @@ void delete_leaf(STACKQUEUE *s, char *target)
                                                         }
                                                         sibling->length--;
                                                         printf("before fixing keys\n");
-                                                        fix_keys(sibling, old_id, sibling->ids[0], sibling->names[0]);
+                                                        fix_keys(sibling, old_id,old_name, sibling->ids[0], sibling->names[0]);
                                                 }
                                         }
-                                        if (j >= 1 && current_root->parent->children[j - 1]->length > 0)
+                                        else if (j >= 1 && current_root->parent->children[j - 1]->length > 0)
                                         {
                                                 printf("Left sibling\n");
                                                 printf("adjusting keys\n");
+                                                int old_id = current_root->ids[0];
+                                                char *old_name = malloc(sizeof(char) * 100);
+                                                strcpy(old_name, current_root->names[0]);
                                                 BNODE *sibling = current_root->parent->children[j - 1];
                                                 current_root->ids[i] = sibling->ids[sibling->length];
                                                 strcpy(current_root->names[i], sibling->names[sibling->length]);
                                                 printf("before fixing keys\n");
-                                                fix_keys(current_root, found, current_root->ids[i], current_root->names[i]);
+                                                fix_keys(current_root, old_id, old_name, current_root->ids[i], current_root->names[i]);
                                                 sibling->length--;
+                                        }
+                                        else
+                                        {
+                                                //merging nodes
+                                                if (j ==2 && current_root->parent->children[j - 1]->length == 0)
+                                                {
+                                                        printf("Rightmost child\n");
+                                                        current_root->parent->length--;
+                                                }
+                                                else
+                                                {
+                                                        printf("Middle child\n");
+                                                        int x = j;
+                                                        BNODE *parent = current_root->parent;
+                                                        while (x < parent->length + 1)
+                                                        {
+                                                                parent->children[x] = parent->children[x + 1];
+                                                                parent->ids[x - 1] = parent->ids[x];
+                                                                strcpy(parent->names[x - 1], parent->names[x]);
+                                                                x++;
+                                                        }
+                                                }
                                         }
                                 }
                                 else
                                 {
+                                        if(j>0 && i==0){
+                                                fix_keys(current_root,found,target,current_root->ids[i],current_root->names[i]);
+                                        }
                                         current_root->length--;
                                 }
                         }
                 }
         }
 }
-void fix_keys(BNODE *current_root, int old_id, int new_id, char *newname)
+void fix_keys(BNODE *current_root, int old_id, char *old_name, int new_id, char *newname)
 {
         if (current_root->parent == NULL)
         {
@@ -777,16 +807,18 @@ void fix_keys(BNODE *current_root, int old_id, int new_id, char *newname)
         {
                 BNODE *parent = current_root->parent;
                 int i = 0;
-                while (parent->ids[i] != old_id && i<=parent->length)
-                {   
+                while ((parent->ids[i] != old_id && strcmp(parent->names[i],old_name)!=0) && i <= parent->length)
+                {
+                        printf("%s\n", parent->names[i]);
                         i++;
                 }
-                if (parent->ids[i] = old_id)
+                if (parent->ids[i] = old_id || strcmp(parent->names[i],old_name)==0)
                 {
                         parent->ids[i] = new_id;
                         strcpy(parent->names[i], newname);
                 }
-                fix_keys(current_root->parent, old_id, new_id, newname);
+                printf("%s\n", parent->names[i]);
+                fix_keys(current_root->parent, old_id,old_name, new_id, newname);
         }
 }
 void fx_rmdir(STACKQUEUE *s, DIR *current_root, char *target)

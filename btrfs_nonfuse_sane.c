@@ -725,7 +725,7 @@ void delete_leaf(STACKQUEUE *s, char *target)
                                 {
                                         //leaf becomes low
                                         printf("Leaf is low\n");
-                                        if ((j <= current_root->parent->length && current_root->parent->children[j + 1] != NULL))
+                                        if (j <= current_root->parent->length && (current_root->parent->children[j + 1] != NULL && current_root->parent->children[j + 1]->length>0))
                                         {
                                                 printf("Right sibling\n");
                                                 BNODE *sibling = current_root->parent->children[j + 1];
